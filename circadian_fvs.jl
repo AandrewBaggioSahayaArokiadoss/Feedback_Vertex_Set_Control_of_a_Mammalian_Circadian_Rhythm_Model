@@ -250,9 +250,21 @@ function max_relative_error(X::AbstractMatrix{<:Real}, target = ATTRACTOR)
     err
 end
 
+"""
+    euclidean_distance(X, target = ATTRACTOR)
+
+Return a vector `d` where `d[k]` is the Euclidean (L2) distance between the
+full 21-dimensional state vector `X[k, :]` and `target` (the attractor by
+default). This summarizes convergence of the whole state vector in a single
+scalar per time point, rather than tracking each state's error separately.
+"""
 function euclidean_distance(X::AbstractMatrix{<:Real}, target = ATTRACTOR)
-    size(X, 2) == length(target) || error("X and target dimensions do not match.")
-    [sqrt(sum((X[k, j] - target[j])^2 for j in axes(X, 2))) for k in axes(X, 1)]
+    d = Vector{Float64}(undef, size(X, 1))
+    for k in axes(X, 1)
+        diff = view(X, k, :) .- target
+        d[k] = sqrt(sum(abs2, diff))
+    end
+    d
 end
 
 function convergence_time(t, X, target = ATTRACTOR; tol::Real = 0.01)
@@ -342,41 +354,41 @@ stride = 10
 
 all_t = Vector{Vector{Float64}}()
 all_X = Vector{Matrix{Float64}}()
-all_distance = Vector{Vector{Float64}}()
+all_err = Vector{Vector{Float64}}()
 convergence_times = Union{Nothing,Float64}[]
 
 println("Running the six FVS-control simulations ...")
 for (i, fvs) in enumerate(CircadianFVS.FVS_SETS)
     t, X = CircadianFVS.rk4_simulate(fvs; x0=x0, tf=tf, dt=dt)
-    distance = CircadianFVS.euclidean_distance(X)
+    err = CircadianFVS.max_relative_error(X)
     tc = CircadianFVS.convergence_time(t, X; tol=tol)
 
     push!(all_t, t)
     push!(all_X, X)
-    push!(all_distance, distance)
+    push!(all_err, err)
     push!(convergence_times, tc)
 
     tc_text = tc === nothing ? "not reached" : @sprintf("%.4f", tc)
-    @printf("  FVS %d: 1%% convergence time = %-11s | final Euclidean distance = %.6e\n",
-            i, tc_text, distance[end])
+    @printf("  FVS %d: convergence time = %-11s | final max relative error = %.6f %%\n",
+            i, tc_text, 100 * err[end])
 end
 
 println("\nSummary")
 println("-------")
-println(rpad("FVS", 8), rpad("1% convergence time", 22), "Final Euclidean distance")
+println(rpad("FVS", 8), rpad("Convergence time", 22), "Final max relative error")
 for i in eachindex(CircadianFVS.FVS_SETS)
     tc_text = convergence_times[i] === nothing ? "not reached" : @sprintf("%.4f", convergence_times[i])
-    distance_text = @sprintf("%.6e", all_distance[i][end])
-    println(rpad("FVS $i", 8), rpad(tc_text, 22), distance_text)
+    err_text = @sprintf("%.6f %%", 100 * all_err[i][end])
+    println(rpad("FVS $i", 8), rpad(tc_text, 22), err_text)
 end
 
 summary_csv = "circadian_fvs_summary.csv"
 open(summary_csv, "w") do io
-    println(io, "fvs,is_valid,convergence_time_1pct,final_euclidean_distance")
+    println(io, "fvs,is_valid,convergence_time,final_max_relative_error")
     for i in eachindex(CircadianFVS.FVS_SETS)
         ok, _ = CircadianFVS.verify_fvs(CircadianFVS.FVS_SETS[i])
         tc_text = convergence_times[i] === nothing ? "" : string(convergence_times[i])
-        println(io, "$(i),$(ok),$(tc_text),$(all_distance[i][end])")
+        println(io, "$(i),$(ok),$(tc_text),$(all_err[i][end])")
     end
 end
 
@@ -384,9 +396,6 @@ end
 chosen_fvs = CircadianFVS.FVS_SETS[chosen]
 t = all_t[chosen]
 X = all_X[chosen]
-# Euclidean distance between the 21-dimensional system trajectory x(t)
-# and the desired attractor x*.
-euclidean_error = all_distance[chosen]
 
 # Plot 1: all 21 states
 p_states = plot(
@@ -411,23 +420,24 @@ end
 display(p_states)
 savefig(p_states, "circadian_fvs2_all_state_trajectories.png")
 
-# Plot 2: Euclidean distance between the full trajectories
-p_error = plot(
+# Plot 2: Euclidean distance between the full state vector x(t) and the
+# attractor x*, i.e. ||x(t) - x*||_2, as a single scalar trajectory (instead
+# of plotting each state's individual error separately).
+dist_chosen = CircadianFVS.euclidean_distance(X)
+
+p_dist = plot(
     t[1:stride:end],
-    euclidean_error[1:stride:end],
-    xlabel = "Time",
-    ylabel = "Euclidean distance",
-    title = "Distance from the desired attractor under FVS $chosen control",
+    dist_chosen[1:stride:end],
+    size = (900, 500),
     legend = false,
-    grid = true,
     linewidth = 2.0,
-    size = (900, 550)
-)
+    title = "Euclidean distance to attractor under FVS $chosen control",
+    xlabel = "t",
+    ylabel = "‖x(t) - x*‖₂")
+hline!(p_dist, [0.0], linestyle = :dash, linewidth = 1.2)
 
-hline!(p_error, [0.0], linestyle = :dash, linewidth = 1.2)
-
-display(p_error)
-savefig(p_error, "circadian_fvs2_euclidean_distance.png")
+display(p_dist)
+savefig(p_dist, "circadian_fvs2_euclidean_distance.png")
 
 println("\nGenerated files:")
 println("  $summary_csv")
