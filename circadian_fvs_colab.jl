@@ -1,25 +1,7 @@
-# Mammalian Circadian Rhythm Control Using Feedback Vertex Sets
-# -----------------------------------------------------------------------------
-# Standalone Julia script for Google Colab (Julia runtime already available).
-#
-# What it does:
-#   1. Implements the 21-state mammalian circadian-rhythm ODE model.
-#   2. Builds the state-influence digraph used in the supplied MATLAB files.
-#   3. Verifies the six supplied feedback vertex sets (FVSs).
-#   4. For each FVS, initializes those states at the desired attractor and
-#      clamps them there (their derivatives are set to zero), exactly matching
-#      the control interpretation used in the supplied MATLAB code.
-#   5. Simulates the remaining states and checks convergence to the attractor.
-#   6. Displays and saves summary plots and a CSV table.
-#
-# Run in Colab with:
-#     include("circadian_fvs_colab.jl")
-# -----------------------------------------------------------------------------
-
 module CircadianFVS
 
 export STATE_NAMES, ATTRACTOR, FVS_SETS, INFLUENCERS,
-       state_indices, circadian_rhs, circadian_controlled_rhs, rk4_simulate,
+       state_indices, rhs, controlled_rhs, rk4_simulate,
        convergence_time, max_relative_error, verify_fvs
 
 const STATE_NAMES = [
@@ -82,7 +64,7 @@ function state_indices(subset)
 end
 
 """
-    circadian_rhs(x)
+    rhs(x)
 
 Right-hand side of the 21-state mammalian circadian rhythm model translated
 from the supplied MATLAB implementation.
@@ -94,7 +76,7 @@ State aliases used internally:
 - PER2CRY2 -> PC22
 - CLKBMAL1 -> CB1
 """
-function circadian_rhs(x::AbstractVector{<:Real})
+function rhs(x::AbstractVector{<:Real})
     length(x) == 21 || error("Expected a 21-state vector.")
 
     (PER1, PER2, per1, per2, CRY1, CRY2, cry1, cry2,
@@ -352,13 +334,13 @@ function circadian_rhs(x::AbstractVector{<:Real})
 end
 
 """
-    circadian_controlled_rhs(x, fvs_idx)
+    controlled_rhs(x, fvs_idx)
 
 Evaluate the model and set the derivatives of controlled FVS states to zero.
 This mirrors the supplied MATLAB `mammcircoverride` implementation.
 """
-function circadian_controlled_rhs(x::AbstractVector{<:Real}, fvs_idx::AbstractVector{<:Integer})
-    dx = circadian_rhs(x)
+function controlled_rhs(x::AbstractVector{<:Real}, fvs_idx::AbstractVector{<:Integer})
+    dx = rhs(x)
     dx[fvs_idx] .= 0.0
     dx
 end
@@ -395,9 +377,9 @@ function rk4_simulate(
     X[1, :] .= x
 
     ffun = if isempty(fvs_idx)
-        circadian_rhs
+        rhs
     else
-        z -> circadian_controlled_rhs(z, fvs_idx)
+        z -> controlled_rhs(z, fvs_idx)
     end
 
     for k in 1:nsteps
@@ -525,11 +507,11 @@ using .CircadianFVS
 println("\nFeedback Vertex Set control of the 21-state mammalian circadian model")
 println("====================================================================")
 @printf("Maximum |f(x*)| at the supplied (rounded) attractor: %.6e\n\n",
-        maximum(abs.(CircadianFVS.circadian_rhs(ATTRACTOR))))
+        maximum(abs.(CircadianFVS.rhs(CircadianFVS.ATTRACTOR))))
 
 println("Checking the six supplied FVS candidates:")
-for (i, fvs) in enumerate(FVS_SETS)
-    ok, topo = verify_fvs(fvs)
+for (i, fvs) in enumerate(CircadianFVS.FVS_SETS)
+    ok, topo = CircadianFVS.verify_fvs(fvs)
     @printf("  FVS %d: %s; remaining states = %d\n",
             i,
             ok ? "VALID (remaining digraph is acyclic)" : "NOT an FVS",
@@ -549,10 +531,10 @@ all_err = Vector{Vector{Float64}}()
 convergence_times = Union{Nothing,Float64}[]
 
 println("Running the six FVS-control simulations ...")
-for (i, fvs) in enumerate(FVS_SETS)
-    t, X = rk4_simulate(fvs; x0=x0, tf=tf, dt=dt)
-    err = max_relative_error(X)
-    tc = convergence_time(t, X; tol=tol)
+for (i, fvs) in enumerate(CircadianFVS.FVS_SETS)
+    t, X = CircadianFVS.rk4_simulate(fvs; x0=x0, tf=tf, dt=dt)
+    err = CircadianFVS.max_relative_error(X)
+    tc = CircadianFVS.convergence_time(t, X; tol=tol)
 
     push!(all_t, t)
     push!(all_X, X)
@@ -570,7 +552,7 @@ end
 println("\nSummary")
 println("-------")
 println(rpad("FVS", 8), rpad("Convergence time", 22), "Final max relative error")
-for i in eachindex(FVS_SETS)
+for i in eachindex(CircadianFVS.FVS_SETS)
     tc_text = convergence_times[i] === nothing ? "not reached" : @sprintf("%.4f", convergence_times[i])
     err_text = @sprintf("%.6f %%", 100 * all_err[i][end])
     println(rpad("FVS $i", 8), rpad(tc_text, 22), err_text)
@@ -580,8 +562,8 @@ end
 summary_csv = "circadian_fvs_summary.csv"
 open(summary_csv, "w") do io
     println(io, "fvs,is_valid,convergence_time,final_max_relative_error")
-    for i in eachindex(FVS_SETS)
-        ok, _ = verify_fvs(FVS_SETS[i])
+    for i in eachindex(CircadianFVS.FVS_SETS)
+        ok, _ = CircadianFVS.verify_fvs(CircadianFVS.FVS_SETS[i])
         tc_text = convergence_times[i] === nothing ? "" : string(convergence_times[i])
         println(io, "$(i),$(ok),$(tc_text),$(all_err[i][end])")
     end
@@ -594,8 +576,8 @@ end
 # -----------------------------------------------------------------------------
 stride = 10
 chosen = 2
-chosen_fvs = FVS_SETS[chosen]
-chosen_idx = Set(state_indices(chosen_fvs))
+chosen_fvs = CircadianFVS.FVS_SETS[chosen]
+chosen_idx = Set(CircadianFVS.state_indices(chosen_fvs))
 t = all_t[chosen]
 X = all_X[chosen]
 
@@ -608,12 +590,12 @@ p2 = plot(
     size = (1050, 650)
 )
 
-for j in 1:length(STATE_NAMES)
+for j in 1:length(CircadianFVS.STATE_NAMES)
     if !(j in chosen_idx)
         plot!(p2,
               t[1:stride:end],
-              X[1:stride:end, j] ./ ATTRACTOR[j],
-              label = STATE_NAMES[j],
+              X[1:stride:end, j] ./ CircadianFVS.ATTRACTOR[j],
+              label = CircadianFVS.STATE_NAMES[j],
               linewidth = 1.8)
     end
 end
@@ -638,9 +620,9 @@ for j in 1:21
           X[1:stride:end, j],
           subplot = j,
           linewidth = 1.5,
-          title = STATE_NAMES[j],
+          title = CircadianFVS.STATE_NAMES[j],
           xlabel = "t")
-    hline!(p3, [ATTRACTOR[j]], subplot = j, linestyle = :dash, linewidth = 1.2)
+    hline!(p3, [CircadianFVS.ATTRACTOR[j]], subplot = j, linestyle = :dash, linewidth = 1.2)
 end
 
 display(p3)
