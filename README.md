@@ -16,7 +16,7 @@ The notebook includes the complete 132-parameter model, an equilibrium solver, d
    ```
 
 4. Open `circadian_fvs_notebook.ipynb` and select **Run All**. Alternatively, upload the notebook to Google Colab (Python runtime), and install any missing dependencies there.
-5. The notebook creates an `outputs/` folder with its CSV and PNG figures.
+5. The notebook creates or updates the `outputs/` folder with its CSV and PNG figures.
 
 The notebook does **not** need the older MATLAB code, Julia code, or the original hand-drawn graph to run.
 
@@ -57,9 +57,9 @@ The vertices are colour-coded according to their biological roles:
 
 ![Influence digraph of the 21-state mammalian circadian rhythm model](outputs/circadian_dependency_digraph.png)
 
-The digraph was generated independently from the differential equations of the published model, rather than reproducing the original figure. It is also used to identify and verify the feedback vertex sets employed in the numerical simulations.
+The digraph was generated independently from the differential equations of the published model, rather than reproducing the original figure. It is used to verify the six candidate feedback vertex sets considered in the numerical simulations; the notebook does not automatically discover those sets.
 
-The underlying mathematical model and its regulatory interactions are attributed to Mirsky et al. (2009) and the subsequent work of Mochizuki et al. (2013).
+The underlying mathematical model and its regulatory interactions are attributed to Mirsky et al. (2009) and the subsequent work of Fiedler et al. (2013).
 
 ### The six FVS candidates
 
@@ -130,5 +130,5 @@ Some Hill exponents are fractional and below one. The zero initial condition lie
 circadian_fvs_notebook.ipynb   # Executable and annotated Python notebook
 README.md                      # This document
 requirements.txt               # Python dependencies
-outputs/                       # Created by running the notebook (optional to commit)
+outputs/                       # Generated figures and results; commit at least circadian_dependency_digraph.png
 ```
