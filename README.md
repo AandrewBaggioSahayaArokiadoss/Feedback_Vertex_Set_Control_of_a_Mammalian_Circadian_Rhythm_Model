@@ -43,6 +43,24 @@ The notebook:
 8. Measures when each trajectory last enters the **1% componentwise-relative-error band** over the observed time window. This is a *finite-time, sample-grid statistic*, not a mathematical proof of convergence.
 9. Generates a corrected digraph, an adjacency matrix, all 21 FVS 2 state traces, distance comparisons, and a CSV summary. A separate classical RK4 function cross-checks the older Julia approach, including step-size refinement.
 
+## Influence Digraph
+
+The figure below shows the **influence digraph** of the 21-state mammalian circadian rhythm model.
+
+Each vertex represents a state variable, and a directed edge from \(u\) to \(v\) indicates that the variable \(u\) appears in the differential equation governing \(v\). Self-dependencies are omitted.
+
+The vertices are colour-coded according to their biological roles:
+
+- **Blue:** Protein species
+- **Green:** mRNA species
+- **Purple:** Protein complexes
+
+![Influence digraph of the 21-state mammalian circadian rhythm model](outputs/circadian_dependency_digraph.png)
+
+The digraph was generated independently from the differential equations of the published model, rather than reproducing the original figure. It is also used to identify and verify the feedback vertex sets employed in the numerical simulations.
+
+The underlying mathematical model and its regulatory interactions are attributed to Mirsky et al. (2009) and the subsequent work of Mochizuki et al. (2013).
+
 ### The six FVS candidates
 
 | Set | Controlled state variables |
